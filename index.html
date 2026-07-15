@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doc Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+  :root{
+    --ink:#1a1a1a;
+    --accent:#0b5d3b;
+    --accent-soft:#e7f0ec;
+    --line:#d8dcd9;
+    --bg:#f6f5f2;
+    --panel:#ffffff;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: 'Helvetica Neue', Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---- top bar ---- */
+  header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 14px;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  header h1{
+    font-size:15px;
+    margin:0;
+    font-weight:700;
+    letter-spacing:0.2px;
+    color:var(--ink);
+    margin-right:auto;
+  }
+  select, button{
+    font-family:var(--sans);
+    font-size:13px;
+    padding:7px 12px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  button.primary{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+    font-weight:600;
+  }
+  button.primary:active{ transform:translateY(1px); }
+  button.ghost:hover, select:hover{ border-color:var(--accent); }
+
+  /* ---- main split ---- */
+  main{
+    flex:1;
+    display:flex;
+    min-height:0;
+  }
+  #editor-pane, #preview-pane{
+    flex:1;
+    min-width:0;
+    overflow:auto;
+  }
+  #editor-pane{
+    border-right:1px solid var(--line);
+    background:#fdfdfc;
+  }
+  textarea{
+    width:100%;
+    height:100%;
+    border:none;
+    resize:none;
+    padding:18px;
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.55;
+    color:#2a2a2a;
+    background:transparent;
+    outline:none;
+  }
+  #preview-pane{
+    background:var(--bg);
+    padding:24px;
+    display:flex;
+    justify-content:center;
+  }
+  #page{
+    background:#fff;
+    width:210mm;
+    min-height:297mm;
+    max-width:100%;
+    padding:18mm 18mm;
+    box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.06);
+  }
+
+  /* ---- document typography (mirrors template.css) ---- */
+  #page h1{
+    font-size:22pt; font-weight:700; margin:0 0 2pt 0;
+    letter-spacing:0.3pt; color:#111;
+  }
+  #page h1 + p{
+    margin:0 0 14pt 0; font-size:9.3pt; color:#444;
+  }
+  #page h2{
+    font-size:10.8pt; text-transform:uppercase; letter-spacing:1.2pt;
+    color:var(--accent); border-bottom:1px solid var(--accent);
+    padding-bottom:2pt; margin:16pt 0 8pt 0;
+  }
+  #page h2:first-of-type{ margin-top:4pt; }
+  #page h3{ font-size:10.5pt; margin:10pt 0 0 0; font-weight:700; color:#111; }
+  #page h3 + p{ margin:0 0 4pt 0; font-size:9.3pt; font-style:italic; color:#555; }
+  #page p{ margin:4pt 0; font-size:10.3pt; line-height:1.42; }
+  #page ul{ margin:2pt 0 6pt 0; padding-left:14pt; }
+  #page li{ margin-bottom:2pt; font-size:10.3pt; }
+  #page strong{ color:#111; }
+  #page a{ color:var(--accent); text-decoration:none; }
+  #page table{ width:100%; border-collapse:collapse; margin:8pt 0 12pt 0; font-size:9.8pt; }
+  #page th{
+    text-align:left; border-bottom:1.5px solid var(--accent); padding:5pt 6pt;
+    color:var(--accent); text-transform:uppercase; font-size:8.5pt; letter-spacing:0.5pt;
+  }
+  #page td{ padding:5pt 6pt; border-bottom:0.5px solid #ddd; }
+  #page tr:last-child td{ border-bottom:none; }
+  #page td:nth-child(n+2), #page th:nth-child(n+2){ text-align:right; }
+
+  footer{
+    padding:6px 14px; font-size:11px; color:#777; background:var(--panel);
+    border-top:1px solid var(--line);
+  }
+
+  /* ---- modal (Records + Save dialog) ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,20,18,0.45);
+    display:flex; align-items:center; justify-content:center;
+    z-index:100; padding:20px;
+  }
+  .modal-overlay.hidden{ display:none; }
+  .modal{
+    background:#fff; border-radius:10px; width:100%; max-width:560px;
+    max-height:82vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  }
+  .modal-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--line);
+  }
+  .modal-header h2{ font-size:15px; margin:0; }
+  .modal-body{ padding:16px 18px; }
+  .modal-close{
+    border:none; background:none; font-size:18px; cursor:pointer; color:#888;
+    padding:2px 6px;
+  }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12px; color:#555; margin-bottom:4px; font-weight:600; }
+  .field input, .field select, .field textarea{
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+    font-family:var(--sans); font-size:13px;
+  }
+  .modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+
+  .filter-tabs{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .filter-tabs button{ padding:5px 10px; font-size:12px; }
+  .filter-tabs button.active{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
+
+  .record-row{
+    display:flex; align-items:center; gap:10px; padding:9px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .record-row:last-child{ border-bottom:none; }
+  .record-info{ flex:1; min-width:0; }
+  .record-label{ font-size:13px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .record-meta{ font-size:11.5px; color:#888; margin-top:1px; }
+  .record-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .record-actions button{ padding:5px 9px; font-size:12px; }
+  .badge{
+    display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.4px; padding:2px 6px; border-radius:4px; margin-right:6px;
+    background:var(--accent-soft); color:var(--accent);
+  }
+  .empty-state{ font-size:13px; color:#888; text-align:center; padding:24px 0; }
+  .io-row{ display:flex; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+  #importFileInput{ display:none; }
+
+  /* ---- print ---- */
+  @media print{
+    header, footer, #editor-pane{ display:none !important; }
+    body, #preview-pane{ background:#fff; padding:0; margin:0; }
+    #page{ box-shadow:none; width:auto; min-height:0; padding:0; margin:0; }
+    main{ display:block; }
+  }
+
+  @media (max-width:800px){
+    main{ flex-direction:column; }
+    #editor-pane{ border-right:none; border-bottom:1px solid var(--line); height:38vh; }
+    #preview-pane{ padding:12px; }
+    #page{ width:100%; padding:14px; min-height:auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📄 Doc Builder</h1>
+  <select id="templateSelect">
+    <option value="">Load template…</option>
+    <option value="cv">CV</option>
+    <option value="cover">Cover Letter</option>
+    <option value="invoice">Invoice</option>
+  </select>
+  <button id="clearBtn" class="ghost">Clear</button>
+  <button id="saveRecordBtn" class="ghost">💾 Save to Records</button>
+  <button id="openRecordsBtn" class="ghost">📁 Records</button>
+  <button id="printBtn" class="primary">Print / Save as PDF</button>
+</header>
+
+<main>
+  <div id="editor-pane">
+    <textarea id="editor" spellcheck="false" placeholder="Write or paste Markdown here…"></textarea>
+  </div>
+  <div id="preview-pane">
+    <div id="page"></div>
+  </div>
+</main>
+
+<footer>Autosaves to this browser only · nothing leaves your device · use the template dropdown to start fresh</footer>
+
+<!-- Save dialog -->
+<div id="saveModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Save to Records</h2>
+      <button class="modal-close" data-close="saveModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="saveType">Type</label>
+        <select id="saveType">
+          <option value="cv">CV</option>
+          <option value="cover">Cover Letter</option>
+          <option value="invoice">Invoice</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="saveLabel">Label (e.g. company / job name)</label>
+        <input id="saveLabel" type="text" placeholder="Persona — Assistant PM">
+      </div>
+      <div class="field">
+        <label for="saveDate">Date</label>
+        <input id="saveDate" type="date">
+      </div>
+      <div class="modal-actions">
+        <button data-close="saveModal">Cancel</button>
+        <button id="confirmSaveBtn" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Records browser -->
+<div id="recordsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>My Records</h2>
+      <button class="modal-close" data-close="recordsModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="filter-tabs">
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="cv">CVs</button>
+        <button data-filter="cover">Cover Letters</button>
+        <button data-filter="invoice">Invoices</button>
+      </div>
+      <div id="recordsList"></div>
+      <div class="io-row">
+        <button id="exportBtn">⬇ Export All (JSON)</button>
+        <button id="importBtn">⬆ Import JSON</button>
+        <input type="file" id="importFileInput" accept="application/json">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const editor = document.getElementById('editor');
+const page = document.getElementById('page');
+const STORAGE_KEY = 'docbuilder-content';
+
+function render(){
+  page.innerHTML = marked.parse(editor.value || '');
+}
+
+editor.addEventListener('input', () => {
+  render();
+  try { localStorage.setItem(STORAGE_KEY, editor.value); } catch(e) {}
+});
+
+document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (confirm('Clear the current document? This cannot be undone.')) {
+    editor.value = '';
+    render();
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  }
+});
+
+const templates = {
+cv: `# Jakob van der Merwe
+jakob@email.com | Cape Town, South Africa | linkedin.com/in/jakob | github.com/jakob
+
+## Summary
+Hardware and blockchain developer with hands-on experience building embedded systems and decentralized applications on Celo.
+
+## Experience
+
+### Freelance Blockchain & Hardware Developer — Self-employed
+*2024 – Present | Cape Town, South Africa*
+
+- Designed and deployed ERC-20/ERC-1155 marketplace contracts on Celo
+- Built a decentralized file storage app combining Celo with Arweave
+- Developed a DIY flood detection system using ESP-NOW and ESP-01
+
+## Skills
+**Blockchain:** Solidity, ethers.js v6, Remix IDE, Celo, Arweave
+**Embedded:** ESP8266, ESP-01, Arduino, ESP-NOW, sensor design
+
+## Projects
+
+### TipJar Smart Contract
+- Solidity refresher project deployed to Celo Alfajores
+`,
+cover: `# Jakob van der Merwe
+jakob@email.com | Cape Town, South Africa | linkedin.com/in/jakob | github.com/jakob
+
+12 July 2026
+
+Hiring Manager
+Company Name
+
+Dear Hiring Manager,
+
+I'm writing to apply for the [Role Title] position at [Company]. [One sentence on why this role/company.]
+
+[Paragraph connecting your experience to what they need.]
+
+I'd welcome the chance to discuss how I could contribute to [Company]'s [team/project]. Thank you for your time and consideration.
+
+Sincerely,
+Jakob van der Merwe
+`,
+invoice: `# Jakob van der Merwe
+jakob@email.com | Cape Town, South Africa | Reg. No. XXXXXXX
+
+**Invoice #** 2026-014
+**Date:** 12 July 2026
+**Due:** 26 July 2026
+
+## Bill To
+Company Name
+Attn: Accounts Payable
+client@company.com
+
+## Line Items
+
+| Description | Qty | Rate | Amount |
+|---|---|---|---|
+| Development work | 18 hrs | $45/hr | $810.00 |
+
+## Summary
+
+| | |
+|---|---|
+| Subtotal | $810.00 |
+| **Total Due** | **$810.00** |
+
+## Payment Details
+Bank: Example Bank | Account: 000123456
+Reference: INV-2026-014
+`
+};
+
+document.getElementById('templateSelect').addEventListener('change', (e) => {
+  const key = e.target.value;
+  if (!key) return;
+  if (editor.value.trim() && !confirm('Replace current content with this template?')) {
+    e.target.value = '';
+    return;
+  }
+  editor.value = templates[key];
+  render();
+  try { localStorage.setItem(STORAGE_KEY, editor.value); } catch(e) {}
+  e.target.value = '';
+});
+
+// restore last session
+try {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) editor.value = saved;
+} catch(e) {}
+render();
+
+/* ================= Records (lightweight local database) ================= */
+const RECORDS_KEY = 'docbuilder-records';
+const typeLabels = { cv: 'CV', cover: 'Cover Letter', invoice: 'Invoice' };
+
+function getRecords(){
+  try { return JSON.parse(localStorage.getItem(RECORDS_KEY)) || []; }
+  catch(e){ return []; }
+}
+function setRecords(records){
+  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(records)); } catch(e) {}
+}
+
+function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', () => closeModal(btn.dataset.close));
+});
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
+});
+
+// ---- Save dialog ----
+document.getElementById('saveRecordBtn').addEventListener('click', () => {
+  if (!editor.value.trim()) { alert('Nothing to save yet — write or load a document first.'); return; }
+  document.getElementById('saveDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('saveLabel').value = '';
+  openModal('saveModal');
+});
+
+document.getElementById('confirmSaveBtn').addEventListener('click', () => {
+  const type = document.getElementById('saveType').value;
+  const label = document.getElementById('saveLabel').value.trim() || 'Untitled';
+  const date = document.getElementById('saveDate').value || new Date().toISOString().slice(0,10);
+  const records = getRecords();
+  records.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    type, label, date, content: editor.value
+  });
+  setRecords(records);
+  closeModal('saveModal');
+});
+
+// ---- Records browser ----
+let currentFilter = 'all';
+
+function renderRecords(){
+  const list = document.getElementById('recordsList');
+  const records = getRecords().filter(r => currentFilter === 'all' || r.type === currentFilter);
+  if (records.length === 0){
+    list.innerHTML = '<div class="empty-state">No saved records yet.</div>';
+    return;
+  }
+  list.innerHTML = records.map(r => `
+    <div class="record-row" data-id="${r.id}">
+      <div class="record-info">
+        <div class="record-label"><span class="badge">${typeLabels[r.type] || r.type}</span>${escapeHtml(r.label)}</div>
+        <div class="record-meta">${r.date || ''}</div>
+      </div>
+      <div class="record-actions">
+        <button data-action="load" data-id="${r.id}">Load</button>
+        <button data-action="delete" data-id="${r.id}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+document.getElementById('openRecordsBtn').addEventListener('click', () => {
+  renderRecords();
+  openModal('recordsModal');
+});
+
+document.querySelectorAll('.filter-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderRecords();
+  });
+});
+
+document.getElementById('recordsList').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const records = getRecords();
+  const rec = records.find(r => r.id === id);
+  if (!rec) return;
+
+  if (btn.dataset.action === 'load'){
+    if (editor.value.trim() && !confirm(`Load "${rec.label}"? This will replace the current editor content.`)) return;
+    editor.value = rec.content;
+    render();
+    try { localStorage.setItem(STORAGE_KEY, editor.value); } catch(e) {}
+    closeModal('recordsModal');
+  } else if (btn.dataset.action === 'delete'){
+    if (!confirm(`Delete "${rec.label}"? This cannot be undone.`)) return;
+    setRecords(records.filter(r => r.id !== id));
+    renderRecords();
+  }
+});
+
+// ---- Export / Import ----
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const records = getRecords();
+  if (records.length === 0){ alert('No records to export yet.'); return; }
+  const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `docbuilder-records-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+      const existing = getRecords();
+      const existingIds = new Set(existing.map(r => r.id));
+      const merged = existing.concat(imported.filter(r => r && r.id && !existingIds.has(r.id)));
+      setRecords(merged);
+      renderRecords();
+      alert(`Imported ${imported.length} record(s).`);
+    } catch(err){
+      alert('Could not read that file — expected a JSON export from this tool.');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+</script>
+
+</body>
+</html>
